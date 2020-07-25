@@ -1,0 +1,94 @@
+.print Question 1 - drafiei
+    select distinct email, name
+    from users u, bids b, sales s
+    where b.sid=s.sid and bidder=lister and email=bidder;
+
+.print Question 2 - drafiei
+    select distinct s.sid, s.lister, s.cond, s.rprice
+    from sales s, bids b, users u
+    where (s.descr like '%ticket%' or s.descr like '%voucher%')
+	  and s.sid=b.sid and b.bidder=u.email and u.city='Edmonton';
+
+.print Question 3 - drafiei
+    select sid, lister
+    from sales 
+    where edate > datetime('now') and edate < datetime('now', '+3 days')
+    except
+    select s.sid, s.lister
+    from sales s, bids b
+    where s.sid=b.sid and amount >= rprice;
+
+.print Question 4 - drafiei
+    select sid, s.descr, s.cond, count(bid), max (amount), cast(julianday(s.edate)-julianday('now') as int)
+    from sales s left outer join bids b using (sid)
+    where s.edate > datetime('now')
+    group by sid, s.descr, s.cond, s.edate;
+    
+.print Question 5 - drafiei
+    select s.sid, s.lister, s.pid, max(amount)
+    from sales s, bids b
+    where s.sid=b.sid and lower(s.descr) like '%xbox%'
+    group by s.sid, s.lister, s.pid
+    having 2*max(amount) < (select max(amount)
+			  from sales s2, bids b2
+			  where s2.sid=b2.sid and s2.pid=s.pid);
+
+.print Question 6 - drafiei
+    select sid
+    from sales 
+    where upper(descr) like '%PS4%' and 
+	  lister in (select reviewee
+		     from reviews
+		     group by reviewee
+		     having count(*) >=3 and avg(rating) > 4);
+
+.print Question 7 - drafiei
+    select bidder, count(distinct b.sid), ifnull(cnt,0), sm
+    from bids b left outer join 
+	 (select bidder, count(s.sid) as cnt, sum(amount) as sm
+          from bids b1, sales s
+          where b1.sid=s.sid and s.edate < datetime('now') and amount >= rprice and
+	        amount >= (select max(amount)
+                           from bids b2
+                           where b2.sid=b1.sid)
+	  group by bidder) w using (bidder)
+    group by bidder, cnt, sm;
+
+.print Question 8 - drafiei
+  select reviewee as email, avg(rating)
+  from reviews
+  group by reviewee
+  having count(*) >=3
+  order by avg(rating) desc
+  limit 5;
+
+.print Question 9 - drafiei
+drop view if exists product_info;
+create view product_info (pid, descr, revcnt, rating, rating6, salecnt) as
+  select p.pid, p.descr, rc, ar, ar6, count(distinct s.sid)
+  from products p left outer join 
+       (select p.pid, count(*) as rc, avg(rating) as ar
+        from products p left outer join previews r using (pid)
+        group by p.pid) r on p.pid=r.pid
+       left outer join
+       (select p.pid, avg(rating) as ar6
+        from products p left outer join previews r using (pid)
+        where rdate > date('now','-6 months')
+        group by p.pid) r6 on p.pid=r6.pid
+       left outer join (select sid, pid from sales union select sid, pid from items) s on s.pid=p.pid
+  group by p.pid, p.descr, rc, ar, ar6;
+
+
+.print Question 10 - drafiei
+  select distinct lister
+  from sales s0
+  where not exists (
+    select sid
+    from sales s
+    where s0.lister=s.lister
+    except
+    select sid
+    from product_info p, sales s
+    where p.pid=s.pid and rating > 4 and salecnt > (select avg(salecnt)
+						      from product_info
+						      group by pid));
